@@ -1,64 +1,56 @@
 import optparse
 import cv2
 import numpy as np
-from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
+from sklearn.datasets import make_moons
+from sklearn.preprocessing import StandardScaler
+from optics import optics, extract_clusters, plot_clusters, Point
+from typing import List
 
 
-def dbscan():
-    data = np.array([[1, 2], [2, 2], [2, 3], [8, 7], [8, 8], [25, 80]])
-
-    epsilon = 2
-    min_samples = 2
-
-    _dbscan = DBSCAN(eps=epsilon, min_samples=min_samples)
-    labels = _dbscan.fit_predict(data)
-
-    # نمایش نتایج
-    core_samples_mask = np.zeros_like(labels, dtype=bool)
-    core_samples_mask[_dbscan.core_sample_indices_] = True
-
-    # خوشه‌ها
-    unique_labels = set(labels)
-    colors = [plt.cm.Spectral(each) for each in np.linspace(0, 1, len(unique_labels))]
-
-    plt.figure(figsize=(8, 6))
-
-    for k, col in zip(unique_labels, colors):
-        if k == -1:
-            # نقاط نویز
-            col = [0, 0, 0, 1]
-
-        class_member_mask = labels == k
-
-        # نقاط هسته‌ای
-        xy = data[class_member_mask & core_samples_mask]
-        plt.plot(
-            xy[:, 0],
-            xy[:, 1],
-            "o",
-            markerfacecolor=tuple(col),
-            markeredgecolor="k",
-            markersize=14,
-        )
-
-        # نقاط مرزی
-        xy = data[class_member_mask & ~core_samples_mask]
-        plt.plot(
-            xy[:, 0],
-            xy[:, 1],
-            "o",
-            markerfacecolor=tuple(col),
-            markeredgecolor="k",
-            markersize=6,
-        )
-
-    plt.title(f"DBSCAN Clustering (eps={epsilon}, min_samples={min_samples})")
-    plt.show()
+def euclidean(x, y):
+    return np.sqrt(np.sum((x - y) ** 2))
 
 
-def optics():
-    pass
+def find_neighbors(db, dist_func2, p, e):
+    return [idx for idx, q in enumerate(db) if dist_func2(p, q) <= e]
+
+
+def dbscan(data, min_pts, eps, dist_func=euclidean):
+    C = 0
+    labels = {}
+    visited = np.zeros(len(data))
+
+    for idx, point in enumerate(data):
+        if visited[idx] == 1:
+            continue
+        visited[idx] = 1
+        neighbors = find_neighbors(data, dist_func, point, eps)
+
+        if len(neighbors) < min_pts:
+            labels.setdefault("Noise", []).append(idx)
+        else:
+            C += 1
+
+            labels.setdefault(C, []).append(idx)
+            neighbors.remove(idx)
+            for q in neighbors:
+                if visited[q] == 1:
+                    continue
+                visited[q] = 1
+                q_neighbors = find_neighbors(data, dist_func, data[q, :], eps)
+                if len(q_neighbors) >= min_pts:
+                    neighbors.extend(q_neighbors)
+                labels[C].append(q)
+
+    return labels
+
+
+def call_optics(points) -> List[List]:
+    eps, min_pts = 0.3, 2
+    ordered = optics(points, eps=eps, min_pts=min_pts)
+    clusters = extract_clusters(ordered, threshold=eps, min_pts=min_pts)
+    return clusters, ordered
 
 
 def som():
@@ -94,10 +86,33 @@ def main():
 
     (options, args) = parser.parse_args()
 
+    # Generate fake data
+    X, _ = make_moons(n_samples=750, shuffle=True, noise=0.11, random_state=42)
+    # Make data to have mean of 0 and a standard deviation of 1
+    X = StandardScaler().fit_transform(X)
     if options.dbscan:
-        dbscan()
+        data_labels = dbscan(X, 4, 0.3, dist_func=euclidean)
+        for key, values in data_labels.items():
+            plt.scatter(
+                X[values][:, 0],
+                X[values][:, 1],
+                marker="o" if type(key) == int else "x",
+                color=None if type(key) == int else "black",
+                s=50,
+                label=f"Cluster {key}" if type(key) == int else key,
+            )
+        plt.xlabel("Longitude")
+        plt.ylabel("Latitude")
+        plt.legend()
+        plt.grid(True)
+        plt.title("DBSCAN Clustering")
+        plt.show()
     elif options.optics:
-        optics()
+        _X: List[Point] = []
+        for x in X:
+            _X.append(Point(x[0], x[1]))
+        [clusters, ordered] = call_optics(_X)
+        plot_clusters(clusters, ordered)
     elif options.som:
         som()
     else:
