@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 from sklearn.datasets import make_moons, make_blobs
 from sklearn.preprocessing import StandardScaler
 from optics import perform_optics, cluster_extraction, plot_clusters, Coordinate
-
 from typing import List
 from dbscan import dbscan
 from som import SOM
