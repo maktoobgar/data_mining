@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- 🎉 feat: added som + optics + dbscan fully functional
 - 🎉 feat: optics + dbscan added
 <!-- ## [0.0.2] - 2022-12-07
 

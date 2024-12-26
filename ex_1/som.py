@@ -6,112 +6,113 @@ from tqdm import trange
 class SOM:
     def __init__(
         self,
-        n_points=500,
-        alpha0=0.5,
-        t_alpha=25,
-        sigma0=2,
-        t_sigma=25,
-        epochs=300,
-        seed=42,
-        shuffle=True,
-        scale=True,
-        history=False,
+        num_neurons=500,
+        initial_lr=0.5,
+        lr_decay_time=25,
+        initial_radius=2,
+        radius_decay_time=25,
+        iterations=300,
+        random_seed=42,
+        shuffle_data=True,
+        normalize=True,
+        store_history=False,
     ):
+        self.config = {
+            "num_neurons": num_neurons,  # Total neurons in the map
+            "initial_lr": initial_lr,  # Starting learning rate
+            "lr_decay_time": lr_decay_time,  # Learning rate decay factor
+            "initial_radius": initial_radius,  # Starting neighborhood radius
+            "radius_decay_time": radius_decay_time,  # Radius decay factor
+            "iterations": iterations,  # Total training epochs
+            "random_seed": random_seed,  # Seed for reproducibility
+            "normalize": normalize,  # Scale weights to match input data
+            "store_history": store_history,  # Option to store weight history
+            "shuffle_data": shuffle_data,  # Shuffle input data
+        }
 
-        self.params = {
-            "n_points": n_points,  # The number of points/weights
-            "alpha0": alpha0,  # Initial learning rate
-            "t_alpha": t_alpha,  # Exponential reduction constant (alpha)
-            "sigma0": sigma0,  # Initial neighborhood strength
-            "t_sigma": t_sigma,  # Exponential reduction constant (sigma)
-            "epochs": epochs,  # Number of iteration
-            "seed": seed,  # Random seed
-            "scale": scale,  # Make max(W) = max(X) and min(W) = min(X)
-            "history": history,  # Save all the Ws (debugging)
-            "shuffle": shuffle,
-        }  # Shuffle the train set
+        if self.config["random_seed"] is not None:
+            torch.manual_seed(random_seed)
 
-        if self.params["seed"]:
-            torch.manual_seed(seed)
+    def train(self, data):
+        num_samples, num_features = data.shape
 
-    def fit(self, X):
-        n_samples, n_attributes = X.shape
+        # Initialize neuron weights randomly
+        self.weights = torch.rand(
+            (self.config["num_neurons"], num_features), dtype=torch.double
+        )
 
-        # Initialize the points randomly (weights)
-        self.W = torch.rand((self.params["n_points"], n_attributes), dtype=torch.double)
+        # Convert input data to torch tensor
+        input_data = torch.from_numpy(data).type(torch.double)
 
-        # From numpy conversion
-        X = torch.from_numpy(X).type(torch.double)
+        # Shuffle data if required
+        if self.config["shuffle_data"]:
+            permutation = torch.randperm(num_samples)
+            input_data = input_data[permutation, :]
 
-        # Shuffling
-        if self.params["shuffle"]:
-            indices = torch.randperm(n_samples)
-            X = X[indices, :]
+        # Normalize weights to match the range of input data
+        if self.config["normalize"]:
+            data_min, data_max = torch.min(input_data), torch.max(input_data)
+            self.weights = self.weights * (data_max - data_min) + data_min
 
-        # Scaling W in the same range as X
-        if self.params["scale"]:
-            self.W = self.W * (torch.max(X) - torch.min(X)) + torch.min(X)
+        # Initialize history tracking if enabled
+        if self.config["store_history"]:
+            self.history = self.weights.unsqueeze(0).clone()
 
-        # Record each W for each t (debugging)
-        if self.params["history"]:
-            self.history = self.W.reshape(1, self.params["n_points"], n_attributes)
+        # Training loop
+        for epoch in trange(self.config["iterations"], desc="Training SOM"):
+            current_input = input_data[epoch % num_samples, :]  # Current input vector
+            distance_vector = (
+                current_input - self.weights
+            )  # Distance between input and weights
 
-        # The training loop
-        for t in trange(self.params["epochs"]):
-            x = X[t % n_samples, :]  # The current sampled x
-            x_dists = x - self.W  # Distances from x to W
+            # Calculate squared Euclidean distances
+            squared_distances = torch.sum(distance_vector**2, dim=1)
+            winner_idx = torch.argmin(squared_distances)
 
-            # Find the winning point
-            distances = torch.pow((x_dists), 2).sum(axis=1)  # [n_points x 1]
-            winner = torch.argmin(distances)
+            # Compute lateral distances from the winning neuron
+            lateral_distances = torch.sum(
+                (self.weights - self.weights[winner_idx, :]) ** 2, dim=1
+            )
 
-            # Lateral distance between neurons
-            lat_dist = torch.pow((self.W - self.W[winner, :]), 2).sum(
-                axis=1
-            )  # [n_points x 1]
+            # Update learning rate and neighborhood radius
+            learning_rate = self.config["initial_lr"] * exp(
+                -epoch / self.config["lr_decay_time"]
+            )
+            neighborhood_radius = self.config["initial_radius"] * exp(
+                -epoch / self.config["radius_decay_time"]
+            )
 
-            # Update the learning rate
-            alpha = self.params["alpha0"] * exp(-t / self.params["t_alpha"])  # [scalar]
+            # Compute the neighborhood function
+            influence = torch.exp(
+                -lateral_distances / (2 * neighborhood_radius**2)
+            ).unsqueeze(1)
 
-            # Update the neighborhood size
-            sigma = self.params["sigma0"] * exp(-t / self.params["t_sigma"])  # [scalar]
+            # Update weights
+            self.weights += learning_rate * influence * distance_vector
 
-            # Evaluate the topological neighborhood
-            h = torch.exp(-lat_dist / (2 * sigma**2)).reshape(
-                (self.params["n_points"], 1)
-            )  # [n_points x 1]
-
-            # Update W
-            self.W += alpha * h * (x_dists)
-
-            if self.params["history"]:
+            # Record weights history if enabled
+            if self.config["store_history"]:
                 self.history = torch.cat(
-                    (
-                        self.history,
-                        self.W.reshape(1, self.params["n_points"], n_attributes),
-                    ),
-                    axis=0,
+                    (self.history, self.weights.unsqueeze(0).clone()), dim=0
                 )
 
-    def adjacency_matrix(self, M):
-        M = torch.from_numpy(M)
-        n_samples, n_attributes = M.shape
+    def compute_adjacency(self, data_matrix):
+        data_tensor = torch.from_numpy(data_matrix).type(torch.double)
+        num_samples, num_features = data_tensor.shape
 
-        # Broadcast the M matrix to a tensor of the shape
-        # (n_sample, (n_samples, n_attributes))
+        # Expand data tensor for pairwise distance computation
+        expanded_tensor = data_tensor.unsqueeze(0).repeat(num_samples, 1, 1)
+        flat_tensor = data_tensor.unsqueeze(1).repeat(1, num_samples, 1)
 
-        tensor = M.repeat(n_samples, 1, 1)  # Make n_samples copy of M
-        M_flat = M.reshape(
-            n_samples, 1, n_attributes
-        )  # Each row of M or each copy in tensor
-        distances = torch.pow((tensor - M_flat), 2).sum(axis=2).sqrt()
+        # Calculate Euclidean distances
+        distances = torch.sqrt(torch.sum((expanded_tensor - flat_tensor) ** 2, dim=2))
         return distances
 
-    def set_params(self, params):
-        self.params = {param: value for param, value in params.items()}
+    def update_parameters(self, new_params):
+        self.config.update(new_params)
 
-    def get_params(self):
-        return self.params
+    def retrieve_parameters(self):
+        return self.config
 
-    def get_weights(self):
-        return self.W
+    def get_current_weights(self):
+        return self.weights

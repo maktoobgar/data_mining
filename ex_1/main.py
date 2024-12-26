@@ -1,60 +1,62 @@
 import optparse
-import cv2
-import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.datasets import make_moons
+from sklearn.datasets import make_moons, make_blobs
 from sklearn.preprocessing import StandardScaler
-from optics import optics, extract_clusters, plot_clusters, Point
+from optics import perform_optics, cluster_extraction, plot_clusters, Coordinate
 from typing import List
+from dbscan import dbscan
+from som import SOM
 
 
-def euclidean(x, y):
-    return np.sqrt(np.sum((x - y) ** 2))
+def call_dbscan(X, min_pts, eps):
+    data_labels = dbscan(X, min_pts, eps)
+    for key, values in data_labels.items():
+        plt.scatter(
+            X[values][:, 0],
+            X[values][:, 1],
+            marker="o" if type(key) == int else "x",
+            color=None if type(key) == int else "black",
+            s=50,
+            label=f"Cluster {key}" if type(key) == int else key,
+        )
+    plt.xlabel("Longitude")
+    plt.ylabel("Latitude")
+    plt.legend()
+    plt.grid(True)
+    plt.title("DBSCAN Clustering")
+    plt.show()
 
 
-def find_neighbors(db, dist_func2, p, e):
-    return [idx for idx, q in enumerate(db) if dist_func2(p, q) <= e]
+def call_optics(points):
+    ordered = perform_optics(points, radius=0.3, min_points=2)
+    clusters = cluster_extraction(ordered, reach_threshold=0.3, min_points=2)
+    plot_clusters(clusters, ordered)
 
 
-def dbscan(data, min_pts, eps, dist_func=euclidean):
-    C = 0
-    labels = {}
-    visited = np.zeros(len(data))
+def call_som(X):
+    parameters = {
+        "n_points": 10,
+        "alpha0": 0.5,
+        "t_alpha": 25,
+        "sigma0": 2,
+        "t_sigma": 25,
+        "epochs": 100,
+        "seed": 124,
+        "scale": True,
+        "shuffle": True,
+        "history": True,
+    }
+    som = SOM()
+    som.update_parameters(parameters)
+    som.train(X)
+    weights = som.get_current_weights()
 
-    for idx, point in enumerate(data):
-        if visited[idx] == 1:
-            continue
-        visited[idx] = 1
-        neighbors = find_neighbors(data, dist_func, point, eps)
-
-        if len(neighbors) < min_pts:
-            labels.setdefault("Noise", []).append(idx)
-        else:
-            C += 1
-
-            labels.setdefault(C, []).append(idx)
-            neighbors.remove(idx)
-            for q in neighbors:
-                if visited[q] == 1:
-                    continue
-                visited[q] = 1
-                q_neighbors = find_neighbors(data, dist_func, data[q, :], eps)
-                if len(q_neighbors) >= min_pts:
-                    neighbors.extend(q_neighbors)
-                labels[C].append(q)
-
-    return labels
-
-
-def call_optics(points) -> List[List]:
-    eps, min_pts = 0.3, 2
-    ordered = optics(points, eps=eps, min_pts=min_pts)
-    clusters = extract_clusters(ordered, threshold=eps, min_pts=min_pts)
-    return clusters, ordered
-
-
-def som():
-    pass
+    fig, ax = plt.subplots()
+    ax.scatter(X[:, 0], X[:, 1], label="Inputs")
+    ax.scatter(weights[:, 0], weights[:, 1], label="Weights")
+    fig.legend()
+    plt.grid(True)
+    plt.show()
 
 
 def main():
@@ -90,31 +92,19 @@ def main():
     X, _ = make_moons(n_samples=750, shuffle=True, noise=0.11, random_state=42)
     # Make data to have mean of 0 and a standard deviation of 1
     X = StandardScaler().fit_transform(X)
+
+    # Change X to _X with Coordinate Point
+    _X: List[Coordinate] = []
+    for x in X:
+        _X.append(Coordinate(x[0], x[1]))
+
     if options.dbscan:
-        data_labels = dbscan(X, 4, 0.3, dist_func=euclidean)
-        for key, values in data_labels.items():
-            plt.scatter(
-                X[values][:, 0],
-                X[values][:, 1],
-                marker="o" if type(key) == int else "x",
-                color=None if type(key) == int else "black",
-                s=50,
-                label=f"Cluster {key}" if type(key) == int else key,
-            )
-        plt.xlabel("Longitude")
-        plt.ylabel("Latitude")
-        plt.legend()
-        plt.grid(True)
-        plt.title("DBSCAN Clustering")
-        plt.show()
+        call_dbscan(X, 4, 0.3)
     elif options.optics:
-        _X: List[Point] = []
-        for x in X:
-            _X.append(Point(x[0], x[1]))
-        [clusters, ordered] = call_optics(_X)
-        plot_clusters(clusters, ordered)
+        call_optics(_X)
     elif options.som:
-        som()
+        X, _ = make_blobs(n_samples=300, centers=2, cluster_std=0.40, random_state=0)
+        call_som(X)
     else:
         parser.print_help()
 

@@ -1,157 +1,170 @@
-from math import sqrt
 import numpy as np
+from math import sqrt
 from collections import defaultdict
 import matplotlib.pyplot as plt
+import itertools
+from heapq import heappop, heappush
 
 
-def euclidean(x, y):
-    return np.sqrt(np.sum((np.array([x.x - y.x, x.y - y.y]) ** 2)))
+class Coordinate:
+    def __init__(self, x_val, y_val):
+        self.x = x_val
+        self.y = y_val
+        self.position = (x_val, y_val)
 
-
-def euc2d(a, b):
-    return sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2)
-
-
-class Point(object):
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-        self.coords = (x, y)
-
-    def __getitem__(self, index):
-        return self.coords[index]
+    def __getitem__(self, idx):
+        return self.position[idx]
 
     def __repr__(self):
-        return "{},{}".format(self[0], self[1])
+        return f"{self[0]},{self[1]}"
 
 
-class Neighborhood(object):
-    def __init__(self, points, eps, distance):
-        self.points = points
-        self.eps = eps
-        self.graph = defaultdict(list)
-        self.nearest = {}
-        self._build(distance=distance)
+class NeighborRegion:
+    def __init__(self, coord_list, radius_limit, dist_func):
+        self.coord_list = coord_list
+        self.radius_limit = radius_limit
+        self.adjacency = defaultdict(list)
+        self.closest_dist = {}
+        self._initialize(dist_func)
 
-    def _build(self, distance):
-        for pi in self.points:
-            min_dist = float("inf")
-            for pj in self.points:
-                if pi == pj:
+    def _initialize(self, dist_func):
+        for coord_i in self.coord_list:
+            min_distance = float("inf")
+            for coord_j in self.coord_list:
+                if coord_i == coord_j:
                     continue
-                dist = distance(pi, pj)
-                if dist <= self.eps:
-                    self.graph[pi].append(pj)
-                if dist < min_dist:
-                    min_dist = dist
-            self.nearest[pi] = min_dist
+                distance = dist_func(coord_i, coord_j)
+                if distance <= self.radius_limit:
+                    self.adjacency[coord_i].append(coord_j)
+                if distance < min_distance:
+                    min_distance = distance
+            self.closest_dist[coord_i] = min_distance
 
-    def of(self, p):
-        return self.graph[p]
+    def get_neighbors(self, coord):
+        return self.adjacency[coord]
 
 
-def optics(points, eps, min_pts, distance=euclidean):
-    import itertools
-    from heapq import heappop, heappush
+def compute_distance(point1, point2):
+    return np.sqrt(np.sum((np.array([point1.x - point2.x, point1.y - point2.y]) ** 2)))
 
+
+def distance_2d(p1, p2):
+    return sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
+
+
+def cluster_extraction(ordered_points, reach_threshold, min_points):
+    cluster_list = []
+    boundary_indices = []
+    for idx, point in enumerate(ordered_points):
+        rd = (
+            point.reachability_distance if point.reachability_distance else float("inf")
+        )
+        if rd > reach_threshold:
+            boundary_indices.append(idx)
+
+    boundary_indices.append(len(ordered_points))
+
+    for i in range(len(boundary_indices) - 1):
+        start, end = boundary_indices[i], boundary_indices[i + 1]
+        if end - start >= min_points:
+            cluster_list.append(ordered_points[start:end])
+
+    return cluster_list
+
+
+def perform_optics(coord_points, radius, min_points, dist_func=compute_distance):
+    ordered_sequence = []
+    region = NeighborRegion(coord_points, radius, dist_func)
+    unvisited = coord_points[:]
+
+    # Initialize points
+    for coord in coord_points:
+        coord.processed = False
+        coord.core_distance = None
+        coord.reachability_distance = None
+
+    # Priority queue related variables
     counter = itertools.count()
-    REMOVED = "<removed>"  # Removed point placeholder.
+    REMOVED_MARKER = "<removed>"
 
-    def add_to_seed(pq, point, entry_finder, rd):
-        if point in entry_finder:
-            remove_point(point, entry_finder)
+    def insert_seed(pq, coord, finder, reach_dist):
+        if coord in finder:
+            delete_seed(coord, finder)
         count = next(counter)
-        entry = [rd, count, point]
-        entry_finder[point] = entry
+        entry = [reach_dist, count, coord]
+        finder[coord] = entry
         heappush(pq, entry)
 
-    def remove_point(point, entry_finder):
-        entry = entry_finder.pop(point)
-        entry[-1] = REMOVED
+    def delete_seed(coord, finder):
+        entry = finder.pop(coord)
+        entry[-1] = REMOVED_MARKER
 
-    def pop_point(pq, entry_finder):
+    def extract_min_seed(pq, finder):
         while pq:
-            rd, count, point = heappop(pq)
-            if point is not REMOVED:
-                del entry_finder[point]
-                return point
+            rd, _, coord = heappop(pq)
+            if coord is not REMOVED_MARKER:
+                del finder[coord]
+                return coord
         return None
 
-    def update(neighbors, p, p_core_dist, seeds, entry_finder, eps, min_pts):
-        for o in neighbors:
-            if o.processed:
+    def update_reach_dist(neighbors, current_coord, core_dist, seeds_pq, seed_finder):
+        for neighbor in neighbors:
+            if neighbor.processed:
                 continue
-            new_reach_distance = max(p_core_dist, distance(p, o))
-            if o.reachability_distance is None:  # Not in `seeds`.
-                o.reachability_distance = new_reach_distance
-                add_to_seed(seeds, o, entry_finder, new_reach_distance)
-            elif new_reach_distance < o.reachability_distance:
-                o.reachability_distance = new_reach_distance
-                add_to_seed(seeds, o, entry_finder, new_reach_distance)
+            new_reach = max(core_dist, dist_func(current_coord, neighbor))
+            if neighbor.reachability_distance is None:
+                neighbor.reachability_distance = new_reach
+                insert_seed(seeds_pq, neighbor, seed_finder, new_reach)
+            elif new_reach < neighbor.reachability_distance:
+                neighbor.reachability_distance = new_reach
+                insert_seed(seeds_pq, neighbor, seed_finder, new_reach)
 
-    def core_distance(p, neighbors, min_pts):
-        if p.core_distance is not None:
-            return p.core_distance
-        elif len(neighbors) >= min_pts - 1:
-            sorted_distance = sorted([distance(n, p) for n in neighbors])
-            p.core_distance = sorted_distance[min_pts - 2]
-            return p.core_distance
-
-    for p in points:
-        p.processed = False
-        p.core_distance = None
-        p.reachability_distance = None
-
-    neighborhood = Neighborhood(points, eps, distance)
-    unvisited = points[:]
-    ordered = list()
+    def determine_core_distance(coord, neighbors, min_pts_required):
+        if coord.core_distance is not None:
+            return coord.core_distance
+        if len(neighbors) >= min_pts_required - 1:
+            sorted_dists = sorted([dist_func(n, coord) for n in neighbors])
+            coord.core_distance = sorted_dists[min_pts_required - 2]
+            return coord.core_distance
+        return None
 
     while unvisited:
-        p = unvisited.pop()
-        if p.processed:
+        current = unvisited.pop()
+        if current.processed:
             continue
 
-        p.processed = True
-        ordered.append(p)
+        current.processed = True
+        ordered_sequence.append(current)
 
-        neighbors = neighborhood.of(p)
-        p_core_dist = core_distance(p, neighbors, min_pts)
+        neighbors = region.get_neighbors(current)
+        core_distance = determine_core_distance(current, neighbors, min_points)
 
-        if p_core_dist is not None:
-            seeds = []  # Priority queue.
-            entry_finder = {}
-            update(neighbors, p, p_core_dist, seeds, entry_finder, eps, min_pts)
-            while len(seeds) > 0:
-                n = pop_point(seeds, entry_finder)
-                if n is None:
+        if core_distance is not None:
+            seed_queue = []
+            seed_finder = {}
+            update_reach_dist(
+                neighbors, current, core_distance, seed_queue, seed_finder
+            )
+            while seed_queue:
+                next_seed = extract_min_seed(seed_queue, seed_finder)
+                if next_seed is None:
                     continue
-                n.processed = True
-                ordered.append(n)
-                n_neighbors = neighborhood.of(n)
-                n_core_dist = core_distance(n, n_neighbors, min_pts)
-                if n_core_dist is not None:
-                    update(
-                        n_neighbors, n, n_core_dist, seeds, entry_finder, eps, min_pts
+                next_seed.processed = True
+                ordered_sequence.append(next_seed)
+                next_neighbors = region.get_neighbors(next_seed)
+                next_core_dist = determine_core_distance(
+                    next_seed, next_neighbors, min_points
+                )
+                if next_core_dist is not None:
+                    update_reach_dist(
+                        next_neighbors,
+                        next_seed,
+                        next_core_dist,
+                        seed_queue,
+                        seed_finder,
                     )
-    return ordered
 
-
-def extract_clusters(ordered, threshold, min_pts):
-    clusters = []
-    separators = []
-    for i, p in enumerate(ordered):
-        rd = p.reachability_distance if p.reachability_distance else float("inf")
-        if rd > threshold:
-            separators.append(i)
-
-    separators.append(len(ordered))
-
-    for i in range(len(separators) - 1):
-        start, end = separators[i], separators[i + 1]
-        if end - start >= min_pts:
-            clusters.append(ordered[start:end])
-
-    return clusters
+    return ordered_sequence
 
 
 def plot_clusters(clusters, ordered_points):
