@@ -15,7 +15,6 @@ class SOM:
         random_seed=42,
         shuffle_data=True,
         normalize=True,
-        store_history=False,
     ):
         self.config = {
             "num_neurons": num_neurons,  # Total neurons in the map
@@ -25,9 +24,8 @@ class SOM:
             "radius_decay_time": radius_decay_time,  # Radius decay factor
             "iterations": iterations,  # Total training epochs
             "random_seed": random_seed,  # Seed for reproducibility
-            "normalize": normalize,  # Scale weights to match input data
-            "store_history": store_history,  # Option to store weight history
             "shuffle_data": shuffle_data,  # Shuffle input data
+            "normalize": normalize,  # Scale weights to match input data
         }
 
         if self.config["random_seed"] is not None:
@@ -53,10 +51,6 @@ class SOM:
         if self.config["normalize"]:
             data_min, data_max = torch.min(input_data), torch.max(input_data)
             self.weights = self.weights * (data_max - data_min) + data_min
-
-        # Initialize history tracking if enabled
-        if self.config["store_history"]:
-            self.history = self.weights.unsqueeze(0).clone()
 
         # Training loop
         for epoch in trange(self.config["iterations"], desc="Training SOM"):
@@ -89,12 +83,6 @@ class SOM:
 
             # Update weights
             self.weights += learning_rate * influence * distance_vector
-
-            # Record weights history if enabled
-            if self.config["store_history"]:
-                self.history = torch.cat(
-                    (self.history, self.weights.unsqueeze(0).clone()), dim=0
-                )
 
     def compute_adjacency(self, data_matrix):
         data_tensor = torch.from_numpy(data_matrix).type(torch.double)

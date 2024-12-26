@@ -14,8 +14,8 @@ def call_dbscan(X, min_pts, eps):
         plt.scatter(
             X[values][:, 0],
             X[values][:, 1],
-            marker="o" if type(key) == int else "x",
-            color=None if type(key) == int else "black",
+            marker="o" if type(key) == int or key.startswith("Border") else "x",
+            color=None if type(key) == int or key.startswith("Border") else "black",
             s=50,
             label=f"Cluster {key}" if type(key) == int else key,
         )
@@ -35,16 +35,15 @@ def call_optics(points):
 
 def call_som(X):
     parameters = {
-        "n_points": 10,
-        "alpha0": 0.5,
-        "t_alpha": 25,
-        "sigma0": 2,
-        "t_sigma": 25,
-        "epochs": 100,
-        "seed": 124,
-        "scale": True,
-        "shuffle": True,
-        "history": True,
+        "num_neurons": 100,
+        "initial_lr": 0.5,
+        "lr_decay_time": 25,
+        "initial_radius": 2,
+        "radius_decay_time": 25,
+        "iterations": 100,
+        "random_seed": 124,
+        "shuffle_data": True,
+        "normalize": True,
     }
     som = SOM()
     som.update_parameters(parameters)

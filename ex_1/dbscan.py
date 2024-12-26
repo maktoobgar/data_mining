@@ -38,6 +38,10 @@ def dbscan(dataset, minimum_points, radius, distance_func=calculate_distance):
                     )
                     if len(neighbor_neighbors) >= minimum_points:
                         neighbor_indices.extend(neighbor_neighbors)
+                    else:
+                        cluster_labels.setdefault(f"Border {cluster_id}", []).append(
+                            neighbor_index
+                        )
                 if not any(
                     neighbor_index in members for members in cluster_labels.values()
                 ):

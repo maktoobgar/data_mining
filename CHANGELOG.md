@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- 🎉 feat: added border points for clusters + simplify the configs for SOM
 - 🎉 feat: added reachability plot for optics
 - 🎉 feat: added som + optics + dbscan fully functional
 - 🎉 feat: optics + dbscan added
