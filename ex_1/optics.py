@@ -199,7 +199,77 @@ def plot_clusters(clusters, ordered_points):
     # Add plot decorations
     plt.xlabel("Longitude")
     plt.ylabel("Latitude")
-    plt.legend()
     plt.title("OPTICS Clustering")
+
+    reach_distances = [
+        (
+            point.reachability_distance
+            if point.reachability_distance is not None
+            else np.inf
+        )
+        for point in ordered_points
+    ]
+
+    # Replace np.inf with a large number for visualization purposes
+    # Alternatively, you can handle inf values differently based on your preference
+    reach_distances = [
+        (
+            rd
+            if rd != np.inf
+            else max([rd for rd in reach_distances if rd != np.inf]) * 1.1
+        )
+        for rd in reach_distances
+    ]
+
+    # Create the reachability plot
+    plt.figure(figsize=(12, 6))
+    plt.plot(
+        range(1, len(reach_distances) + 1),
+        reach_distances,
+        marker=".",
+        linestyle="-",
+        color="b",
+    )
+    plt.xlabel("Order of Points")
+    plt.ylabel("Reachability Distance")
+
+    plt.grid(True)
+    plt.show()
+
+
+def plot_reachability(ordered_points):
+    # Extract reachability distances, replacing None with np.inf for plotting
+    reach_distances = [
+        (
+            point.reachability_distance
+            if point.reachability_distance is not None
+            else np.inf
+        )
+        for point in ordered_points
+    ]
+
+    # Replace np.inf with a large number for visualization purposes
+    # Alternatively, you can handle inf values differently based on your preference
+    reach_distances = [
+        (
+            rd
+            if rd != np.inf
+            else max([rd for rd in reach_distances if rd != np.inf]) * 1.1
+        )
+        for rd in reach_distances
+    ]
+
+    # Create the reachability plot
+    plt.figure(figsize=(12, 6))
+    plt.plot(
+        range(1, len(reach_distances) + 1),
+        reach_distances,
+        marker=".",
+        linestyle="-",
+        color="b",
+    )
+    plt.xlabel("Order of Points")
+    plt.ylabel("Reachability Distance")
+    plt.title("OPTICS Reachability Plot")
     plt.grid(True)
     plt.show()
