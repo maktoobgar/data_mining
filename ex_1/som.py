@@ -85,18 +85,6 @@ class SOM:
                 # Update weights
                 self.weights += learning_rate * influence * distance_vector
 
-    def compute_adjacency(self, data_matrix):
-        data_tensor = torch.from_numpy(data_matrix).type(torch.double)
-        num_samples, num_features = data_tensor.shape
-
-        # Expand data tensor for pairwise distance computation
-        expanded_tensor = data_tensor.unsqueeze(0).repeat(num_samples, 1, 1)
-        flat_tensor = data_tensor.unsqueeze(1).repeat(1, num_samples, 1)
-
-        # Calculate Euclidean distances
-        distances = torch.sqrt(torch.sum((expanded_tensor - flat_tensor) ** 2, dim=2))
-        return distances
-
     def update_parameters(self, new_params):
         self.config.update(new_params)
 
