@@ -35,12 +35,12 @@ def call_optics(points):
 
 def call_som(X):
     parameters = {
-        "num_neurons": 100,
+        "num_neurons": 300,
         "initial_lr": 0.5,
         "lr_decay_time": 25,
-        "initial_radius": 2,
+        "initial_radius": 0.23,
         "radius_decay_time": 25,
-        "iterations": 100,
+        "iterations": 50,
         "random_seed": 124,
         "shuffle_data": True,
         "normalize": True,

@@ -1,6 +1,7 @@
 import torch
 from math import exp
 from tqdm import trange
+import sys
 
 
 class SOM:
@@ -54,35 +55,37 @@ class SOM:
 
         # Training loop
         for epoch in trange(self.config["iterations"], desc="Training SOM"):
-            current_input = input_data[epoch % num_samples, :]  # Current input vector
-            distance_vector = (
-                current_input - self.weights
-            )  # Distance between input and weights
+            for current_input in input_data:
+                # current_input = input_data[epoch % num_samples, :]  # Current input vector
 
-            # Calculate squared Euclidean distances
-            squared_distances = torch.sum(distance_vector**2, dim=1)
-            winner_idx = torch.argmin(squared_distances)
+                distance_vector = (
+                    current_input - self.weights
+                )  # Distance between input and weights
 
-            # Compute lateral distances from the winning neuron
-            lateral_distances = torch.sum(
-                (self.weights - self.weights[winner_idx, :]) ** 2, dim=1
-            )
+                # Calculate squared Euclidean distances
+                squared_distances = torch.sum(distance_vector**2, dim=1)
+                winner_idx = torch.argmin(squared_distances)
 
-            # Update learning rate and neighborhood radius
-            learning_rate = self.config["initial_lr"] * exp(
-                -epoch / self.config["lr_decay_time"]
-            )
-            neighborhood_radius = self.config["initial_radius"] * exp(
-                -epoch / self.config["radius_decay_time"]
-            )
+                # Compute lateral distances from the winning neuron
+                lateral_distances = torch.sum(
+                    (self.weights - self.weights[winner_idx, :]) ** 2, dim=1
+                )
 
-            # Compute the neighborhood function
-            influence = torch.exp(
-                -lateral_distances / (2 * neighborhood_radius**2)
-            ).unsqueeze(1)
+                # Update learning rate and neighborhood radius
+                learning_rate = self.config["initial_lr"] * exp(
+                    -epoch / self.config["lr_decay_time"]
+                )
+                neighborhood_radius = self.config["initial_radius"] * exp(
+                    -epoch / self.config["radius_decay_time"]
+                )
 
-            # Update weights
-            self.weights += learning_rate * influence * distance_vector
+                # Compute the neighborhood function
+                influence = torch.exp(
+                    -lateral_distances / (2 * neighborhood_radius**2)
+                ).unsqueeze(1)
+
+                # Update weights
+                self.weights += learning_rate * influence * distance_vector
 
     def compute_adjacency(self, data_matrix):
         data_tensor = torch.from_numpy(data_matrix).type(torch.double)

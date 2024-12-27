@@ -200,6 +200,8 @@ def plot_clusters(clusters, ordered_points):
     plt.xlabel("Longitude")
     plt.ylabel("Latitude")
     plt.title("OPTICS Clustering")
+    plt.grid(True)
+    plt.legend()
 
     reach_distances = [
         (
