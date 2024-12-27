@@ -56,8 +56,6 @@ class SOM:
         # Training loop
         for epoch in trange(self.config["iterations"], desc="Training SOM"):
             for current_input in input_data:
-                # current_input = input_data[epoch % num_samples, :]  # Current input vector
-
                 distance_vector = (
                     current_input - self.weights
                 )  # Distance between input and weights
